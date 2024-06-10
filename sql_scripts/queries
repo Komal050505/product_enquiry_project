@@ -1,0 +1,23 @@
+create table product_enquiry (CustomerName Varchar,
+							  Gender Varchar,
+							  Age Integer,
+							  Occupation varchar,
+							  MobileNo Integer unique,
+							  Email varchar unique,
+							  VehicleModel varchar,
+							  State varchar,
+							  District varchar,
+							  City varchar,
+							  ExistingVehicle varchar,
+							  DealerState varchar,
+							  DealerTown varchar,
+							  DealerName varchar,
+							  BriefAboutEnquiry varchar,
+							  ExpectedDateOfPurchase date,
+							  SentToDealer BOOLEAN,
+							  DealerCode integer unique,
+							  LeadId int,
+							  CreatedDate Date,
+							  IsPurchased boolean)
+
+select * from 	public.product_enquiry
