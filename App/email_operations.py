@@ -9,13 +9,20 @@ Functions:
     notify_failure(subject, body): Sends a failure notification email.
 """
 
-
+# Standard library imports (for sending emails)
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from App.email_configurations import RECEIVER_EMAIL, ERROR_HANDLING_GROUP_EMAIL, SENDER_EMAIL, PASSWORD, SMTP_SERVER, \
+# Application-specific imports from our application(for email configuration details)
+from App.email_configurations import (
+    RECEIVER_EMAIL,
+    ERROR_HANDLING_GROUP_EMAIL,
+    SENDER_EMAIL,
+    PASSWORD,
+    SMTP_SERVER,
     SMTP_PORT
+)
 
 
 def send_email(too_email, subject, body):

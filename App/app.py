@@ -1,16 +1,28 @@
+"""
+This module contains the actual api's implementations.
+
+"""
+# These are Standard library imports (built-in modules)
 import os
+from datetime import date, datetime
+
+# These are Flask imports (for handling web requests and responses)
 from flask import Flask, request, jsonify
 from flask_restful import Api
-from sqlalchemy import and_, inspect, engine
 
+# These are SQLAlchemy imports (for ORM and database operations)
+from sqlalchemy import and_, inspect
+from sqlalchemy.exc import SQLAlchemyError
+
+# These are Application-specific imports (for email handling and session management)
 from App.email_configurations import RECEIVER_EMAIL, SENDER_EMAIL
 from App.email_operations import notify_failure, notify_success
-from utils.reusables import record_to_dict, reset_sent_flag
 from db_connections.configurations import session
 from product_model.table import ProductEnquiryForms
-from sqlalchemy.exc import SQLAlchemyError
+
+# These are Logging imports (for logging operations in the application)
 from logging_package.logging_utility import log_info, log_error, log_debug, log_warning
-from datetime import date, datetime
+
 
 app = Flask(__name__)
 api = Api(app)

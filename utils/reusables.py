@@ -1,11 +1,22 @@
+"""
+This module contains reusables that can be used in our project api's
+
+"""
+# SQLAlchemy imports (for handling ORM operations and exceptions)
 from sqlalchemy.exc import SQLAlchemyError
 
+# Application-specific imports (for logging, database session, and models)
 from logging_package.logging_utility import log_info, log_error
 from product_model.table import ProductEnquiryForms
 from db_connections.configurations import session
 
 
 def is_customer_valid(MobileNo):
+    """
+    This checks whether the customer is valid or not
+    :param MobileNo: int
+    :return: boolean
+    """
     result = session.query(ProductEnquiryForms).filter(ProductEnquiryForms.name == MobileNo).all()
     if result:
         return True

@@ -13,6 +13,7 @@ Functions:
 # Local imports
 from logging_package.logging_module import logging
 
+# Switch button can be used to make logs on/true and off/false whenever required.
 LOG_SWITCH = True
 
 
