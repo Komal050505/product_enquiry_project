@@ -69,3 +69,60 @@ def notify_failure(subject, body):
         :return: None
         """
     send_email(ERROR_HANDLING_GROUP_EMAIL, subject, body)
+
+
+def format_enquiries_for_email(enquiries_data):
+    """
+    Helper function to format the enquiries data for email content.
+    :param enquiries_data: List of dictionaries containing enquiry details.
+    :return: A formatted string with enquiry details for email content.
+    """
+    formatted_enquiries = ""
+    for enquiry in enquiries_data:
+        formatted_enquiries += f"""
+        Customer Name: {enquiry['CustomerName']}
+        Gender: {enquiry['Gender']}
+        Age: {enquiry['Age']}
+        Mobile No: {enquiry['MobileNo']}
+        Email: {enquiry['Email']}
+        Vehicle Model: {enquiry['VehicleModel']}
+        State: {enquiry['State']}
+        District: {enquiry['District']}
+        City: {enquiry['City']}
+        Lead ID: {enquiry['LeadId']}
+        Created Date: {enquiry['CreatedDate']}
+        Purchased: {'Yes' if enquiry['IsPurchased'] else 'No'}
+        ---------------------------
+        """
+    return formatted_enquiries
+
+
+def format_dealers_for_email(dealers_data):
+    """
+    Formats dealer data for inclusion in an email.
+
+    This function takes a list of dealer records and formats them into a human-readable
+    string that can be included in an email body. Each dealer's information is presented
+    in a tabular format for clarity.
+
+    Parameters:
+        - dealers_data (list of dict): List of dictionaries containing dealer codes and names.
+
+    Returns:
+        - str: A formatted string representing the dealer data.
+    """
+    if not dealers_data:
+        return "No dealer data available."
+
+    # Header for the dealer list
+    formatted_data = "Dealer Code | Dealer Name\n"
+    formatted_data += "-" * 40 + "\n"
+
+    # Format each dealer's information
+    for dealer in dealers_data:
+        # Ensure that dealer_code and dealer_name are strings
+        dealer_code = str(dealer.get('dealercode', 'N/A')).strip()
+        dealer_name = str(dealer.get('dealername', 'N/A')).strip()
+        formatted_data += f"{dealer_code.ljust(15)} |       {dealer_name}\n"
+
+    return formatted_data

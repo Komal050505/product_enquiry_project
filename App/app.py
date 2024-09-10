@@ -11,18 +11,18 @@ from flask import Flask, request, jsonify
 from flask_restful import Api
 
 # These are SQLAlchemy imports (for ORM and database operations)
-from sqlalchemy import and_, inspect
+from sqlalchemy import and_, inspect, func
 from sqlalchemy.exc import SQLAlchemyError
 
 # These are Application-specific imports (for email handling and session management)
 from App.email_configurations import RECEIVER_EMAIL, SENDER_EMAIL
-from App.email_operations import notify_failure, notify_success
+from App.email_operations import notify_failure, notify_success, format_enquiries_for_email, format_dealers_for_email
 from db_connections.configurations import session
 from product_model.table import ProductEnquiryForms
 
 # These are Logging imports (for logging operations in the application)
 from logging_package.logging_utility import log_info, log_error, log_debug, log_warning
-
+from utils.reusables import record_to_dict
 
 app = Flask(__name__)
 api = Api(app)
@@ -83,6 +83,447 @@ def get_primary_key_details():
         session.close()
         log_info("GET /get_primary_key_details - Session closed.")
         log_info("GET /get_primary_key_details - Finished processing request.")
+
+
+@app.route('/get-enquiries-by-date', methods=['GET'])
+def get_enquiries_by_date():
+    """
+      Retrieve product enquiries based on a date range.
+
+      This function allows users to search for product enquiries between a specified start date
+      and end date. Both `start_date` and `end_date` should be provided as query parameters
+      in the 'dd-mm-yyyy' format. The function returns all matching enquiries, along with the
+      total count of records found.
+
+      Parameters:
+          - start_date (str): The start of the date range in 'dd-mm-yyyy' format.
+          - end_date (str): The end of the date range in 'dd-mm-yyyy' format.
+
+      Returns:
+           A JSON response of records with detailed email notification
+      """
+    try:
+        log_info("Starting function: get_enquiries_by_date")
+
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        log_info(f"Received start_date: {start_date}, end_date: {end_date}")
+
+        if not start_date or not end_date:
+            log_warning("Missing required parameters: start_date or end_date")
+            return jsonify({'error': 'start_date and end_date are required parameters'}), 400
+
+        start_date_obj = datetime.strptime(start_date, '%d-%m-%Y')
+        end_date_obj = datetime.strptime(end_date, '%d-%m-%Y')
+
+        log_debug(f"Converted start_date: {start_date_obj}, end_date: {end_date_obj}")
+
+        enquiries = session.query(ProductEnquiryForms).filter(
+            ProductEnquiryForms.CreatedDate >= start_date_obj,
+            ProductEnquiryForms.CreatedDate <= end_date_obj
+        ).all()
+
+        total_count = len(enquiries)
+        log_info(f"Total enquiries retrieved: {total_count}")
+
+        enquiries_data = [record_to_dict(enquiry) for enquiry in enquiries]
+
+        subject = "Enquiry Retrieval Success"
+        body = f"""Successfully retrieved {total_count} enquiries between {start_date} and {end_date}.
+        \nDetails of the records:
+        {format_enquiries_for_email(enquiries_data)}
+        """
+        notify_success(subject, body)
+
+        log_info(f"Successfully retrieved {total_count} enquiries")
+
+        return jsonify({'total_count': total_count, 'enquiries': enquiries_data}), 200
+
+    except Exception as e:
+        log_error(f"Error retrieving enquiries by date range: {str(e)}")
+
+        subject = "Enquiry Retrieval Failure"
+        body = f"""
+        Failed to retrieve enquiries between {start_date} and {end_date}.
+        \nError: {str(e)}
+        """
+        notify_failure(subject, body)
+
+        return jsonify({'error': 'Failed to retrieve enquiries'}), 500
+
+    finally:
+        log_info("Ending function: get_enquiries_by_date")
+
+
+@app.route('/get-enquiries-by-vehicle-model', methods=['GET'])
+def get_enquiries_by_vehicle_model():
+    """
+       Fetch enquiries based on the vehicle model.
+
+       This function allows users to search for product enquiries by providing the vehicle model
+       as a query parameter. You can choose whether the search is case-sensitive or not by setting
+       the `case_sensitive` flag. The function will return a list of matching enquiries, along with
+       the total number of results found.
+
+       Parameters:
+           - vehicle_model (str): The vehicle model to search for.
+
+       Returns:
+           JSON response with detaied records and total records with matching details
+
+       """
+    try:
+        log_info("Starting function: get_enquiries_by_vehicle_model")
+
+        vehicle_model = request.args.get('vehicle_model')
+        case_sensitive = request.args.get('case_sensitive', 'false').lower() == 'true'
+        log_info(f"Received vehicle_model: {vehicle_model}, case_sensitive: {case_sensitive}")
+
+        if not vehicle_model:
+            log_warning("Vehicle model is required but not provided")
+            return jsonify({"error": "Vehicle model is required"}), 400
+
+        if case_sensitive:  # If vehicle model contains like Thar-4X, Maruti-VDI which involves in case sensitive
+            log_info("Performing case-sensitive partial search")
+            enquiries = session.query(ProductEnquiryForms).filter(
+                ProductEnquiryForms.VehicleModel.like(f'%{vehicle_model}%')
+            ).all()
+        else:  # Else it performs case-insensitive search
+            log_info("Performing case-insensitive partial search")
+            enquiries = session.query(ProductEnquiryForms).filter(
+                func.lower(ProductEnquiryForms.VehicleModel).like(f'%{vehicle_model.lower()}%')
+            ).all()
+
+        if not enquiries:
+            log_info(f"No enquiries found for vehicle model: {vehicle_model}")
+            return jsonify({"message": "No enquiries found for this vehicle model"}), 404
+
+        total_count = len(enquiries)
+        log_info(f"Found {total_count} enquiries for vehicle model: {vehicle_model}")
+
+        enquiries_data = [record_to_dict(enquiry) for enquiry in enquiries]
+
+        subject = "Enquiry Retrieval Success by Vehicle Model"
+        body = f"""
+        Successfully retrieved {total_count} enquiries for vehicle model: {vehicle_model}.
+        Case-sensitive search: {'Yes' if case_sensitive else 'No'}.
+        \nDetails of the records:
+        {format_enquiries_for_email(enquiries_data)}
+        """
+        notify_success(subject, body)
+
+        log_info(f"Successfully retrieved {total_count} enquiries for vehicle model: {vehicle_model}")
+
+        return jsonify({"total_count": total_count, "enquiries": enquiries_data}), 200
+
+    except Exception as e:
+        log_error(f"Error retrieving enquiries by vehicle model: {str(e)}")
+
+        subject = "Enquiry Retrieval Failure by Vehicle Model"
+        body = f"""Failed to retrieve enquiries for vehicle model: {vehicle_model}.
+        Case-sensitive search: {'Yes' if case_sensitive else 'No'}.
+        \nError: {str(e)}
+        """
+        notify_failure(subject, body)
+
+        return jsonify({"error": "Internal Server Error"}), 500
+
+    finally:
+        log_info("Ending function: get_enquiries_by_vehicle_model")
+
+
+@app.route('/mark-sent-to-dealer', methods=['PUT'])
+def mark_sent_to_dealer():
+    """
+    Mark an enquiry as sent to the dealer based on the provided mobile number.
+
+    This function updates the `SentToDealer` status of an enquiry to `True` for the specified
+    mobile number. It returns a success message if the update is successful or an error message
+    if the enquiry is not found or an internal server error occurs.
+
+    Parameters:
+        - mobile_no (str): The mobile number of the enquiry to be updated.
+
+    Returns:
+        - A JSON response of records with email notifications
+    """
+    try:
+        log_info("Starting function: mark_sent_to_dealer")
+
+        mobile_no = request.args.get('mobileno')
+        log_info(f"Received mobile_no: {mobile_no}")
+
+        if not mobile_no:
+            log_warning("Mobile number is required but not provided")
+            return jsonify({"error": "Mobile number is required"}), 400
+
+        enquiry = session.query(ProductEnquiryForms).filter_by(MobileNo=mobile_no).first()
+
+        if not enquiry:
+            log_warning(f"Enquiry not found for mobile number: {mobile_no}")
+            return jsonify({"error": "Enquiry not found"}), 404
+
+        enquiry.SentToDealer = True
+        session.commit()
+
+        enquiry_details = record_to_dict(enquiry)
+        enquiry_details_str = format_enquiries_for_email([enquiry_details])
+
+        subject = "Enquiry Marked as Sent to Dealer"
+        body = f"""The enquiry with mobile number {mobile_no} has been successfully marked as sent to the dealer.
+        
+        Details of the enquiry:
+        {enquiry_details_str}"""
+        notify_success(subject, body)
+
+        log_info(f"Enquiry with mobile number {mobile_no} marked as sent to dealer successfully")
+
+        return jsonify({
+            "message": "Enquiry marked as sent to dealer",
+            "enquiry": enquiry_details
+        }), 200
+
+    except Exception as e:
+        log_error(f"Error marking enquiry as sent to dealer: {str(e)}")
+
+        subject = "Failed to Mark Enquiry as Sent to Dealer"
+        body = f"""Failed to mark the enquiry with mobile number {mobile_no} as sent to the dealer.
+
+           Error: {str(e)}
+           """
+        notify_failure(subject, body)
+
+        return jsonify({"error": "Internal Server Error"}), 500
+
+    finally:
+        log_info("Ending function: mark_sent_to_dealer")
+
+
+@app.route('/search-enquiries', methods=['GET'])
+def search_enquiries():
+    """
+    Search for enquiries based on customer name, mobile number, or email.
+
+    This function allows searching for enquiries by filtering based on the provided customer
+    name, mobile number, and email. It performs case-insensitive searches for customer names
+    and exact matches for mobile numbers and emails.
+
+    Parameters:
+        - customer_name (str): The name of the customer to search for (case-insensitive).
+        - mobile_no (str): The mobile number of the customer to search for (exact match).
+        - email (str): The email of the customer to search for (exact match).
+
+    Returns:
+        - A JSON response of records with email notifications
+    """
+    try:
+        log_info("Starting function: search_enquiries")
+
+        customer_name = request.args.get('customername')
+        mobile_no = request.args.get('mobileno')
+        email = request.args.get('email')
+        log_info(f"Received parameters: customer_name={customer_name}, mobile_no={mobile_no}, email={email}")
+
+        query = session.query(ProductEnquiryForms)
+
+        if customer_name:
+            query = query.filter(ProductEnquiryForms.CustomerName.ilike(f"%{customer_name}%"))
+            log_info(f"Filtering by customer_name: {customer_name}")
+        if mobile_no:
+            query = query.filter_by(MobileNo=mobile_no)
+            log_info(f"Filtering by mobile_no: {mobile_no}")
+        if email:
+            query = query.filter_by(Email=email)
+            log_info(f"Filtering by email: {email}")
+
+        enquiries = query.all()
+
+        if not enquiries:
+            log_info("No enquiries found for the provided information")
+            return jsonify({"message": "No enquiries found for the provided information"}), 404
+
+        enquiries_data = [record_to_dict(enquiry) for enquiry in enquiries]
+
+        subject = "Enquiries Search Success"
+        body = f"""Successfully retrieved enquiries based on the following search criteria:
+        - Customer Name: {customer_name}
+        - Mobile Number: {mobile_no}
+        - Email: {email}\n\nTotal enquiries found: {len(enquiries_data)}
+        \nDetails of the records:{format_enquiries_for_email(enquiries_data)}
+        """
+        notify_success(subject, body)
+
+        log_info(f"Successfully retrieved {len(enquiries_data)} enquiries")
+
+        return jsonify({
+            "total_count": len(enquiries_data),
+            "enquiries": enquiries_data
+        }), 200
+
+    except Exception as e:
+        log_error(f"Error searching enquiries: {str(e)}")
+
+        subject = "Failed to Search Enquiries"
+        body = f"""
+        Failed to search enquiries with the following parameters:
+        - Customer Name: {customer_name}
+        - Mobile Number: {mobile_no}
+        - Email: {email}
+
+        Error: {str(e)}
+        """
+        notify_failure(subject, body)
+
+        return jsonify({"error": "Internal Server Error"}), 500
+
+    finally:
+        log_info("Ending function: search_enquiries")
+
+
+@app.route('/get-dealer-codes-and-names', methods=['GET'])
+def get_dealer_codes_and_names():
+    """
+    Retrieves and returns dealer codes and names for the given state.
+
+    This function fetches dealer codes and names from the database based on the provided
+    state parameter and returns them in a formatted manner.
+
+    Parameters:
+        - state (str): The state for which dealer codes and names are to be retrieved.
+
+    Returns:
+        - A JSON response with dealer codes and names and email notifications
+    """
+    try:
+        log_info("Starting function: get_dealer_codes_and_names")
+
+        state = request.args.get('state')
+        log_info(f"Received state: {state}")
+
+        if not state:
+            log_warning("State parameter is required but not provided")
+            return jsonify({"error": "State parameter is required"}), 400
+
+        dealers = session.query(ProductEnquiryForms).filter_by(DealerState=state).all()
+
+        if not dealers:
+            log_info(f"No dealers found for state: {state}")
+            return jsonify({"message": "No dealers found for the provided state"}), 404
+
+        dealers_data = [{'dealercode': dealer.DealerCode, 'dealername': dealer.DealerName} for dealer in dealers]
+
+        formatted_dealers = format_dealers_for_email(dealers_data)
+
+        subject = "Dealer Codes and Names Retrieval Success"
+        body = f"""Successfully retrieved dealer codes and names for the state: {state}.\n\n
+        Total dealers found: {len(dealers_data)}
+
+        Details of the records:
+        {formatted_dealers}
+        """
+        notify_success(subject, body)
+
+        log_info(f"Successfully retrieved {len(dealers_data)} dealers for state: {state}")
+
+        return jsonify({'total_count': len(dealers_data), 'dealers': dealers_data}), 200
+
+    except Exception as e:
+        log_error(f"Error retrieving dealer codes and names: {str(e)}")
+
+        subject = "Failed to Retrieve Dealer Codes and Names"
+        body = f"""Failed to retrieve dealer codes and names for state: {state}.
+        \nError: {str(e)}
+        """
+        notify_failure(subject, body)
+
+        return jsonify({'error': 'Failed to retrieve dealer codes and names'}), 500
+
+    finally:
+        log_info("Ending function: get_dealer_codes_and_names")
+
+
+@app.route('/dealer-interactions', methods=['GET'])
+def dealer_interactions():
+    """
+    Retrieve dealer interactions based on provided filters.
+
+    This function retrieves enquiries that have been marked as sent to a dealer. You can filter
+    the results based on the dealer's name, state, and town. It returns a list of enquiries that
+    match the filters or a message if no enquiries are found.
+
+    Parameters:
+        - dealer_name (str): The name of the dealer to filter by (case-insensitive).
+        - dealer_state (str): The state of the dealer to filter by.
+        - dealer_town (str): The town of the dealer to filter by.
+
+    Returns:
+        - A JSON response with email notifications
+    """
+    try:
+        log_info("Starting function: dealer_interactions")
+
+        dealer_name = request.args.get('dealername')
+        dealer_state = request.args.get('dealerstate')
+        dealer_town = request.args.get('dealertown')
+        log_info(f"Received parameters: dealer_name={dealer_name}, dealer_state={dealer_state},"
+                 f" dealer_town={dealer_town}")
+
+        query = session.query(ProductEnquiryForms).filter_by(SentToDealer=True)
+
+        if dealer_name:
+            query = query.filter(ProductEnquiryForms.DealerName.ilike(f"%{dealer_name}%"))
+            log_info(f"Filtering by dealer_name: {dealer_name}")
+        if dealer_state:
+            query = query.filter_by(DealerState=dealer_state)
+            log_info(f"Filtering by dealer_state: {dealer_state}")
+        if dealer_town:
+            query = query.filter_by(DealerTown=dealer_town)
+            log_info(f"Filtering by dealer_town: {dealer_town}")
+
+        enquiries = query.all()
+
+        if not enquiries:
+            log_info("No dealer interactions found for the provided filters")
+            return jsonify({"message": "No dealer interactions found"}), 404
+
+        enquiries_data = [record_to_dict(enquiry) for enquiry in enquiries]
+
+        subject = "Dealer Interactions Retrieval Success"
+        body = f"""Successfully retrieved dealer interactions with the following filters:
+        - Dealer Name: {dealer_name}
+        - Dealer State: {dealer_state}
+        - Dealer Town: {dealer_town}
+
+        Total dealer interactions found: {len(enquiries_data)}
+        \nDetails of the records:
+        {format_enquiries_for_email(enquiries_data)}
+        """
+        notify_success(subject, body)
+
+        log_info(f"Successfully retrieved {len(enquiries_data)} dealer interactions")
+
+        return jsonify({
+            "total_count": len(enquiries_data),
+            "enquiries": enquiries_data
+        }), 200
+
+    except Exception as e:
+        log_error(f"Error retrieving dealer interactions: {str(e)}")
+
+        subject = "Failed to Retrieve Dealer Interactions"
+        body = f"""Failed to retrieve dealer interactions with the following filters:
+        - Dealer Name: {dealer_name}
+        - Dealer State: {dealer_state}
+        - Dealer Town: {dealer_town}
+
+        Error: {str(e)}
+        """
+        notify_failure(subject, body)
+
+        return jsonify({"error": "Internal Server Error"}), 500
+
+    finally:
+        log_info("Ending function: dealer_interactions")
 
 
 @app.route('/post-records', methods=['POST'])
