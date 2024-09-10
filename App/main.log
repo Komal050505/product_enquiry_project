@@ -2719,3 +2719,7 @@ WHERE product_enquiry.expecteddateofpurchase IS NOT NULL
 2024-09-11 02:06:36,530 - WARNING -  * Debugger is active!
 2024-09-11 02:06:36,533 - INFO -  * Debugger PIN: 322-033-255
 2024-09-11 02:06:48,319 - INFO - 127.0.0.1 - - [11/Sep/2024 02:06:48] "[33mGET /get-enquiries-with-expected-purchase HTTP/1.1[0m" 404 -
+2024-09-11 02:08:30,133 - INFO -  * Detected change in 'C:\\Users\\lenovo\\PycharmProjects\\product_enquiry\\App\\email_configurations.py', reloading
+2024-09-11 02:08:30,298 - INFO -  * Restarting with stat
+2024-09-11 02:08:31,278 - WARNING -  * Debugger is active!
+2024-09-11 02:08:31,281 - INFO -  * Debugger PIN: 322-033-255
