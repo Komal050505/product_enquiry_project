@@ -7,8 +7,10 @@ regarding their enquiries about vehicle products, along with their interaction
 details with dealers.
 """
 
+# SQLAlchemy Imports
 from sqlalchemy import Column, String, Integer, Date, BOOLEAN
 from sqlalchemy.ext.declarative import declarative_base
+
 
 Base = declarative_base()
 """
